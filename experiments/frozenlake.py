@@ -32,14 +32,25 @@ def run(episodes: int = 500, render_every: int | None = 100):
         {"Q-learning": q_returns, "SARSA": sarsa_returns}, window=10, title="FrozenLake"
     )
 
-    q_video = record_agent_video(env_fn, q_agent, video_dir="videos/frozenlake", prefix="q-learning")
-    sarsa_video = record_agent_video(
-        env_fn, sarsa_agent, video_dir="videos/frozenlake", prefix="sarsa"
-    )
+    spec = gym.spec("FrozenLake-v1")
+    supports_rgb = bool(getattr(spec, "render_modes", None)) and "rgb_array" in spec.render_modes
 
-    print("Saved FrozenLake replays:")
-    print(f"- Q-learning: {q_video}")
-    print(f"- SARSA: {sarsa_video}")
+    if supports_rgb:
+        q_video = record_agent_video(
+            env_fn, q_agent, video_dir="videos/frozenlake", prefix="q-learning"
+        )
+        sarsa_video = record_agent_video(
+            env_fn, sarsa_agent, video_dir="videos/frozenlake", prefix="sarsa"
+        )
+
+        print("Saved FrozenLake replays:")
+        print(f"- Q-learning: {q_video}")
+        print(f"- SARSA: {sarsa_video}")
+    else:
+        print(
+            "Skipping FrozenLake replay capture: gymnasium 0.29.1 only supports "
+            "'human'/'ansi' rendering for this environment."
+        )
 
 
 if __name__ == "__main__":
