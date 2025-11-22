@@ -1,5 +1,6 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
-gymnasium[classic-control,box2d,mujoco]==0.29.1
+nBox2D==2.3.10
+gymnasium[classic-control,mujoco]==0.29.1
 numpy
 matplotlib
 # Use a CPU-only build to avoid pulling large CUDA wheels by default.
