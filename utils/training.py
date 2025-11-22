@@ -8,6 +8,7 @@ import numpy as np
 import gymnasium as gym
 
 from agents.base import Agent
+from utils.logger import MetricsLogger
 
 
 EpisodeStats = Dict[str, float]
@@ -22,6 +23,7 @@ def train_agent(
     render_every: int | None = None,
     render_mode: str = "human",
     log_every: int | None = 20,
+    logger: MetricsLogger | None = None,
 ) -> Tuple[List[float], List[EpisodeStats]]:
     """Train an agent for a fixed number of episodes.
 
@@ -32,14 +34,14 @@ def train_agent(
     returns: List[float] = []
     stats: List[EpisodeStats] = []
 
-    env = _build_env(env_fn, render_mode if render_every else None)
+    env = _build_env(env_fn, render_mode if render_every else None, seed=seed)
     if seed is not None:
-        env.reset(seed=seed)
         env.action_space.seed(seed)
     agent.on_train_start(seed=seed)
 
     for episode in range(episodes):
-        obs, _ = env.reset()
+        episode_seed = None if seed is None else seed + episode
+        obs, _ = env.reset(seed=episode_seed)
         action = agent.begin_episode(obs)
         done = False
         total_reward = 0.0
@@ -58,6 +60,9 @@ def train_agent(
         returns.append(total_reward)
         stats.append({"return": total_reward, "length": length})
 
+        if logger:
+            logger.log_episode(episode=episode, episode_return=total_reward, length=length)
+
         if log_every and (episode + 1) % log_every == 0:
             window = returns[-log_every:]
             mean_return = float(np.mean(window))
@@ -71,12 +76,17 @@ def train_agent(
     return returns, stats
 
 
-def evaluate_agent(env_fn: Callable[..., gym.Env], agent: Agent, episodes: int = 5) -> float:
+def evaluate_agent(
+    env_fn: Callable[..., gym.Env], agent: Agent, episodes: int = 5, seed: int | None = None
+) -> float:
     """Evaluate an agent without exploration noise."""
-    env = env_fn()
+    env = _build_env(env_fn, render_mode=None, seed=seed)
+    if seed is not None:
+        env.action_space.seed(seed)
     scores = []
-    for _ in range(episodes):
-        obs, _ = env.reset()
+    for index in range(episodes):
+        episode_seed = None if seed is None else seed + index
+        obs, _ = env.reset(seed=episode_seed)
         done = False
         total = 0.0
         while not done:
@@ -89,16 +99,28 @@ def evaluate_agent(env_fn: Callable[..., gym.Env], agent: Agent, episodes: int =
     return float(np.mean(scores))
 
 
-def _build_env(env_fn: Callable[..., gym.Env], render_mode: str | None) -> gym.Env:
+def _build_env(env_fn: Callable[..., gym.Env], render_mode: str | None, seed: int | None = None) -> gym.Env:
     """Create an environment, passing through render mode when supported."""
 
+    env = None
     try:
         if render_mode is not None:
-            return env_fn(render_mode=render_mode)
+            env = env_fn(render_mode=render_mode, seed=seed)
+        elif seed is not None:
+            env = env_fn(seed=seed)
     except TypeError:
-        # ``render_mode`` is optional; fall back if the factory does not accept it.
-        pass
-    return env_fn()
+        # ``render_mode`` and ``seed`` are optional; fall back if the factory does not accept them.
+        if render_mode is not None:
+            env = env_fn(render_mode=render_mode)
+    if env is None:
+        env = env_fn()
+
+    if seed is not None:
+        try:
+            env.reset(seed=seed)
+        except TypeError:
+            env.reset()
+    return env
 
 
 def record_agent_video(
