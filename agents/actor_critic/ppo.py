@@ -121,13 +121,14 @@ class PPOAgent(Agent):
             self.reset_storage()
             return None
 
-        action, log_prob = self._sample_action(obs_tensor)
-        self._store(obs_tensor, action, log_prob, 0.0, 1.0, value)
-
         if len(self.rew_buf) >= self.batch_size:
-            # When the batch is full mid-episode, bootstrap from current state value.
+            # When the batch is full mid-episode, bootstrap from current state value and
+            # start a fresh buffer for the ongoing episode.
             self._update(done_value=value.detach())
             self.reset_storage()
+
+        action, log_prob = self._sample_action(obs_tensor)
+        self._store(obs_tensor, action, log_prob, 0.0, 1.0, value)
         return self._to_env_action(action)
 
     def _store(self, obs, action, log_prob, reward, mask, value):
