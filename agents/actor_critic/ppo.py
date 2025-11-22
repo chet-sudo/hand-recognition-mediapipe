@@ -149,6 +149,7 @@ class PPOAgent(Agent):
         obs_tensor = torch.stack(self.obs_buf)
         act_tensor = torch.stack(self.act_buf)
         old_logp = torch.stack(self.logp_buf).detach()
+        old_logp = torch.stack(self.logp_buf).detach()
 
         for _ in range(self.train_iters):
             dist = self._distribution(obs_tensor)
