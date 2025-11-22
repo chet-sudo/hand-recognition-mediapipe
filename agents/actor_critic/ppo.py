@@ -103,15 +103,28 @@ class PPOAgent(Agent):
 
     def step(self, observation, reward: float, terminated: bool, truncated: bool):
         done = terminated or truncated
-        obs_tensor = to_tensor(observation)
-        action, log_prob = self._sample_action(obs_tensor)
-        value = self.value_fn(obs_tensor)
         mask = 0.0 if done else 1.0
-        self._store(obs_tensor, action, log_prob, reward, mask, value)
 
-        if done or len(self.rew_buf) >= self.batch_size:
-            # When an episode ends or the batch is full, update networks.
-            self._update(done_value=0.0 if done else value.detach())
+        # The reward/mask received here belongs to the action sampled in the previous call,
+        # so update that transition before collecting the next action.
+        self.rew_buf[-1] = torch.tensor(reward, dtype=torch.float32)
+        self.mask_buf[-1] = torch.tensor(mask, dtype=torch.float32)
+
+        obs_tensor = to_tensor(observation)
+        value = self.value_fn(obs_tensor)
+
+        if done:
+            # Bootstrap value is zero at episode end.
+            self._update(done_value=0.0)
+            self.reset_storage()
+            return None
+
+        action, log_prob = self._sample_action(obs_tensor)
+        self._store(obs_tensor, action, log_prob, 0.0, 1.0, value)
+
+        if len(self.rew_buf) >= self.batch_size:
+            # When the batch is full mid-episode, bootstrap from current state value.
+            self._update(done_value=value.detach())
             self.reset_storage()
         return self._to_env_action(action)
 
@@ -132,7 +145,7 @@ class PPOAgent(Agent):
         advantages, returns = compute_gae(rewards, values, masks, self.gamma, self.lam)
         obs_tensor = torch.stack(self.obs_buf)
         act_tensor = torch.stack(self.act_buf)
-        old_logp = torch.stack(self.logp_buf)
+        old_logp = torch.stack(self.logp_buf).detach()
 
         for _ in range(self.train_iters):
             dist = self._distribution(obs_tensor)
